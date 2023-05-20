@@ -116,6 +116,7 @@ impl DataTypeTrait<MyGraphState> for MyDataType {
             MyDataType::Vec2 => Cow::Borrowed("2d vector"),
         }
     }
+
 }
 
 // A trait for the node kinds, which tells the library how to build new nodes

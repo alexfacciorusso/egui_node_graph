@@ -240,7 +240,7 @@ where
                     .find_map(|(port_id, _)| {
                         let compatible_ports = graph
                             .any_param_type(port_id.into())
-                            .map(|other| other == port_type)
+                            .map(|other| other.can_connect_to(port_type))
                             .unwrap_or(false);
 
                         if compatible_ports {
@@ -722,16 +722,17 @@ where
             if let Some((origin_node, origin_param)) = ongoing_drag {
                 if origin_node != node_id {
                     // Don't allow self-loops
-                    if graph.any_param_type(origin_param).unwrap() == port_type
-                        && close_enough
-                        && ui.input(|i| i.pointer.any_released())
-                    {
+                    let origin_param_type = graph.any_param_type(origin_param).unwrap();
+                    let can_connect = origin_param_type.can_connect_to(port_type);
+                    let is_pointer_released = ui.input(|i| i.pointer.any_released());
+
+                    if can_connect && close_enough && is_pointer_released {
                         match (param_id, origin_param) {
                             (AnyParameterId::Input(input), AnyParameterId::Output(output))
                             | (AnyParameterId::Output(output), AnyParameterId::Input(input)) => {
                                 responses.push(NodeResponse::ConnectEventEnded { input, output });
                             }
-                            _ => { /* Ignore in-in or out-out connections */ }
+                            _ => { /* Ignore connection */ }
                         }
                     }
                 }

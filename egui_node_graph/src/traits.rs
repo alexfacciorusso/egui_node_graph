@@ -85,6 +85,8 @@ pub trait DataTypeTrait<UserState>: PartialEq + Eq {
     /// }
     /// ```
     fn name(&self) -> std::borrow::Cow<str>;
+
+    fn can_connect_to(&self, other: &Self) -> bool;
 }
 
 /// This trait must be implemented for the `NodeData` generic parameter of the
