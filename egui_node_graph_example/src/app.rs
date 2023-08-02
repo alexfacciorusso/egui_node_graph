@@ -116,6 +116,7 @@ impl DataTypeTrait<MyGraphState> for MyDataType {
             MyDataType::Vec2 => Cow::Borrowed("2d vector"),
         }
     }
+
 }
 
 // A trait for the node kinds, which tells the library how to build new nodes
@@ -417,8 +418,12 @@ impl eframe::App for NodeGraphExample {
         });
         let graph_response = egui::CentralPanel::default()
             .show(ctx, |ui| {
-                self.state
-                    .draw_graph_editor(ui, AllMyNodeTemplates, &mut self.user_state)
+                self.state.draw_graph_editor(
+                    ui,
+                    AllMyNodeTemplates,
+                    &mut self.user_state,
+                    Vec::default(),
+                )
             })
             .inner;
         for node_response in graph_response.node_responses {

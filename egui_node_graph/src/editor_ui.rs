@@ -111,6 +111,7 @@ where
         ui: &mut Ui,
         all_kinds: impl NodeTemplateIter<Item = NodeTemplate>,
         user_state: &mut UserState,
+        prepend_responses: Vec<NodeResponse<UserResponse, NodeData>>,
     ) -> GraphResponse<UserResponse, NodeData> {
         // This causes the graph editor to use as much free space as it can.
         // (so for windows it will use up to the resizeably set limit
@@ -130,7 +131,7 @@ where
 
         // The responses returned from node drawing have side effects that are best
         // executed at the end of this function.
-        let mut delayed_responses: Vec<NodeResponse<UserResponse, NodeData>> = vec![];
+        let mut delayed_responses: Vec<NodeResponse<UserResponse, NodeData>> = prepend_responses;
 
         // Used to detect when the background was clicked
         let mut click_on_background = false;
@@ -240,7 +241,7 @@ where
                     .find_map(|(port_id, _)| {
                         let compatible_ports = graph
                             .any_param_type(port_id.into())
-                            .map(|other| other == port_type)
+                            .map(|other| other.can_connect_to(port_type))
                             .unwrap_or(false);
 
                         if compatible_ports {
@@ -566,6 +567,8 @@ where
             ui.add_space(margin.y);
             title_height = ui.min_size().y;
 
+            ui.add_space(margin.y);
+
             // First pass: Draw the inner fields. Compute port heights
             let inputs = self.graph[self.node_id].inputs.clone();
             for (param_name, param_id) in inputs {
@@ -722,16 +725,17 @@ where
             if let Some((origin_node, origin_param)) = ongoing_drag {
                 if origin_node != node_id {
                     // Don't allow self-loops
-                    if graph.any_param_type(origin_param).unwrap() == port_type
-                        && close_enough
-                        && ui.input(|i| i.pointer.any_released())
-                    {
+                    let origin_param_type = graph.any_param_type(origin_param).unwrap();
+                    let can_connect = origin_param_type.can_connect_to(port_type);
+                    let is_pointer_released = ui.input(|i| i.pointer.any_released());
+
+                    if can_connect && close_enough && is_pointer_released {
                         match (param_id, origin_param) {
                             (AnyParameterId::Input(input), AnyParameterId::Output(output))
                             | (AnyParameterId::Output(output), AnyParameterId::Input(input)) => {
                                 responses.push(NodeResponse::ConnectEventEnded { input, output });
                             }
-                            _ => { /* Ignore in-in or out-out connections */ }
+                            _ => { /* Ignore connection */ }
                         }
                     }
                 }
@@ -791,19 +795,20 @@ where
         }
 
         // Draw the background shape.
-        // NOTE: This code is a bit more involved than it needs to be because egui
-        // does not support drawing rectangles with asymmetrical round corners.
-
         let (shape, outline) = {
             let rounding_radius = 4.0;
-            let rounding = Rounding::same(rounding_radius);
 
-            let titlebar_height = title_height + margin.y;
             let titlebar_rect =
-                Rect::from_min_size(outer_rect.min, vec2(outer_rect.width(), titlebar_height));
+                Rect::from_min_size(outer_rect.min, vec2(outer_rect.width(), title_height));
+
             let titlebar = Shape::Rect(RectShape {
                 rect: titlebar_rect,
-                rounding,
+                rounding: Rounding {
+                    nw: rounding_radius,
+                    ne: rounding_radius,
+                    sw: 0.0,
+                    se: 0.0,
+                },
                 fill: self.graph[self.node_id]
                     .user_data
                     .titlebar_color(ui, self.node_id, self.graph, user_state)
@@ -812,8 +817,8 @@ where
             });
 
             let body_rect = Rect::from_min_size(
-                outer_rect.min + vec2(0.0, titlebar_height - rounding_radius),
-                vec2(outer_rect.width(), outer_rect.height() - titlebar_height),
+                titlebar.visual_bounding_rect().left_top() + vec2(0.0, title_height),
+                vec2(outer_rect.width(), outer_rect.height() - title_height),
             );
             let body = Shape::Rect(RectShape {
                 rect: body_rect,
@@ -823,12 +828,17 @@ where
             });
 
             let bottom_body_rect = Rect::from_min_size(
-                body_rect.min + vec2(0.0, body_rect.height() - titlebar_height * 0.5),
-                vec2(outer_rect.width(), titlebar_height),
+                body_rect.min + vec2(0.0, body_rect.height() - title_height * 0.5),
+                vec2(outer_rect.width(), title_height),
             );
             let bottom_body = Shape::Rect(RectShape {
                 rect: bottom_body_rect,
-                rounding,
+                rounding: Rounding {
+                    nw: 0.0,
+                    ne: 0.0,
+                    sw: rounding_radius,
+                    se: rounding_radius,
+                },
                 fill: background_color,
                 stroke: Stroke::NONE,
             });
@@ -837,7 +847,7 @@ where
             let outline = if self.selected {
                 Shape::Rect(RectShape {
                     rect: node_rect.expand(1.0),
-                    rounding,
+                    rounding: Rounding::same(rounding_radius),
                     fill: Color32::WHITE.lighten(0.8),
                     stroke: Stroke::NONE,
                 })
